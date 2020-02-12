@@ -22,3 +22,5 @@ $ ~/go/bin/dlv debug --headless --listen :2345 ~/go/src/github.com/gkuehn001/go-
 }
 ```
 * Connect to the delve server with VS Code and start debugging
+## Tetrominoe Roation
+This version of the game makes uses the Super Rotation System (current Tetris Guideline standard) (https://tetris.fandom.com/wiki/SRS)
