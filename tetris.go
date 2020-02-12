@@ -7,13 +7,55 @@ import (
 	"github.com/nsf/termbox-go"
 )
 
-var dropTime = 1000 // ms
-var info = "Event Test"
+var dropTime int = 1000 // ms
+var xScale = 2
+var yScale = 1
+var boardSizeX = 10
+var boardSizeY = 20
 
-func tbprint(x, y int, fg, bg termbox.Attribute, msg string) {
+func tbPrint(x, y int, fg, bg termbox.Attribute, msg string) {
 	for _, c := range msg {
 		termbox.SetCell(x, y, c, fg, bg)
 		x += runewidth.RuneWidth(c)
+	}
+}
+
+func drawHints(col termbox.Attribute, left, top int) {
+	x, y := left-22, top+2
+	tbPrint(x, y, col, col, "  \u2190 : Move Left")
+	y++
+	tbPrint(x, y, col, col, "  \u2192 : Move Right")
+	y++
+	tbPrint(x, y, col, col, "  \u2191 : Rotate")
+	y++
+	tbPrint(x, y, col, col, "  \u2193 : Drop")
+	y++
+	tbPrint(x, y, col, col, "ESC : Quit")
+
+	tbPrint(left+4, top+boardSizeY*yScale+3, col, col, "Play Tetris!")
+}
+
+func drawBoardFrame(col termbox.Attribute, left, top int) {
+	l := left
+	r := left + boardSizeX*xScale - 1
+	t := top
+	b := top + boardSizeY*yScale - 1
+
+	for y := t; y <= b; y++ {
+		tbPrint(l-2, y, col, col, "<|")
+		tbPrint(r+1, y, col, col, "|>")
+
+		for x := l; x <= r; x += 2 {
+			tbPrint(x, y, col, col, ".")
+		}
+	}
+
+	tbPrint(l-1, b+1, col, col, "+")
+	tbPrint(r+1, b+1, col, col, "+")
+
+	for x := l; x <= r; x += 2 {
+		tbPrint(x, b+1, col, col, "--")
+		tbPrint(x, b+2, col, col, "\\/")
 	}
 }
 
@@ -23,33 +65,36 @@ func draw() {
 
 	w, h := termbox.Size()
 
-	midy := h / 2
-	midx := w / 2
+	centerY := h / 2
+	centerX := w / 2
 
-	tbprint(midx-9, midy-1, coldef, coldef, info)
-	tbprint(midx-9, midy+1, coldef, coldef, "Press ESC to quit")
+	boardLeft := centerX - boardSizeX*xScale/2
+	boardTop := centerY - boardSizeY*yScale/2 - 2
+
+	drawBoardFrame(coldef, boardLeft, boardTop)
+	drawHints(coldef, boardLeft, boardTop)
 
 	termbox.Flush()
 }
 
 func onKeyDown() {
-	info = "Down"
+
 }
 
 func onKeyLeft() {
-	info = "Left"
+
 }
 
 func onKeyRight() {
-	info = "Right"
+
 }
 
 func onKeyUp() {
-	info = "Up"
+
 }
 
 func onDrop() {
-	info = "Drop"
+
 }
 
 func main() {
