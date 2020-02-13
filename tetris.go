@@ -14,13 +14,13 @@ const xScale = 2
 const yScale = 1
 const boardSizeX = 10
 const boardSizeY = 20
+const fullRow = (1 << boardSizeX) - 1
 
 type dropResult int
 
 const (
 	none dropResult = 0
 	fix  dropResult = 1
-	full dropResult = 2
 )
 
 var tetrominoX = [7][16]int{
@@ -48,10 +48,12 @@ type tetromino struct {
 	positionX, positionY int
 }
 
-func (t *tetromino) TryMoveLeft() {
+func (t *tetromino) TryMoveLeft(board []int) {
 	if t != nil {
 		for i := t.variation; i < t.variation+4; i++ {
-			if (tetrominoX[t.tIndex][i] + (t.positionX - 1)) < 0 {
+			x := tetrominoX[t.tIndex][i] + t.positionX
+			y := tetrominoY[t.tIndex][i] + t.positionY
+			if !checkFreeBoardPosition(board, x-1, y) {
 				return
 			}
 		}
@@ -59,10 +61,12 @@ func (t *tetromino) TryMoveLeft() {
 	}
 }
 
-func (t *tetromino) TryMoveRight() {
+func (t *tetromino) TryMoveRight(board []int) {
 	if t != nil {
 		for i := t.variation; i < t.variation+4; i++ {
-			if (tetrominoX[t.tIndex][i] + (t.positionX + 1)) >= boardSizeX {
+			x := tetrominoX[t.tIndex][i] + t.positionX
+			y := tetrominoY[t.tIndex][i] + t.positionY
+			if !checkFreeBoardPosition(board, x+1, y) {
 				return
 			}
 		}
@@ -84,10 +88,12 @@ func (t *tetromino) TryRotate() {
 	}
 }
 
-func (t *tetromino) TryDrop() dropResult {
+func (t *tetromino) TryDrop(board []int) dropResult {
 	if t != nil {
 		for i := t.variation; i < t.variation+4; i++ {
-			if (tetrominoY[t.tIndex][i] + (t.positionY + 1)) >= boardSizeY {
+			x := tetrominoX[t.tIndex][i] + t.positionX
+			y := tetrominoY[t.tIndex][i] + t.positionY
+			if !checkFreeBoardPosition(board, x, y+1) {
 				return fix
 			}
 		}
@@ -96,12 +102,38 @@ func (t *tetromino) TryDrop() dropResult {
 	return none
 }
 
-func (t *tetromino) Fix(board []int) {
+func (t *tetromino) Fix(board []int) bool {
 	if t != nil {
-		for i := 0; i < 4; i++ {
-			// TODO Fix currents tetrominoes position on the board
+		for i := t.variation; i < t.variation+4; i++ {
+			x := tetrominoX[t.tIndex][i] + t.positionX
+			y := tetrominoY[t.tIndex][i] + t.positionY
+			if y < 0 {
+				return false
+			}
+			board[y] = board[y] | (1 << x)
 		}
 	}
+	return true
+}
+
+func checkFreeBoardPosition(board []int, x, y int) bool {
+	if x < 0 || x >= boardSizeX || y >= boardSizeY {
+		return false
+	}
+	if y >= 0 && (board[y]&(1<<x)) == (1<<x) {
+		return false
+	}
+	return true
+}
+
+func removeFullRows(board []int) []int {
+	for i := boardSizeY - 1; i >= 0; i-- {
+		if board[i] == fullRow {
+			board = append([]int{0}, append(board[:i], board[i+1:]...)...)
+			i++
+		}
+	}
+	return board
 }
 
 func tbPrint(x, y int, fg, bg termbox.Attribute, msg string) {
@@ -112,16 +144,18 @@ func tbPrint(x, y int, fg, bg termbox.Attribute, msg string) {
 }
 
 func drawHints(col termbox.Attribute, left, top int) {
-	x, y := left-22, top+2
-	tbPrint(x, y, col, col, "  \u2190 : Move Left")
+	x, y := left-24, top+2
+	tbPrint(x, y, col, col, "    \u2190 : Move Left")
 	y++
-	tbPrint(x, y, col, col, "  \u2192 : Move Right")
+	tbPrint(x, y, col, col, "    \u2192 : Move Right")
 	y++
-	tbPrint(x, y, col, col, "  \u2191 : Rotate")
+	tbPrint(x, y, col, col, "    \u2191 : Rotate")
 	y++
-	tbPrint(x, y, col, col, "  \u2193 : Drop")
+	tbPrint(x, y, col, col, "    \u2193 : Drop")
+	y += 2
+	tbPrint(x, y, col, col, "SPACE : Restart")
 	y++
-	tbPrint(x, y, col, col, "ESC : Quit")
+	tbPrint(x, y, col, col, "  ESC : Quit")
 
 	tbPrint(left+4, top+boardSizeY*yScale+3, col, col, "Play Tetris!")
 }
@@ -163,7 +197,19 @@ func spawnTmino() *tetromino {
 	return &tetromino{tIndex: rand.Intn(len(tetrominoX)), variation: 0, positionX: 3, positionY: -2}
 }
 
-func draw(t *tetromino) {
+func drawBoard(col termbox.Attribute, left, top int, board []int) {
+	for y := 0; y < boardSizeY; y++ {
+		if board[y] > 0 {
+			for x := 0; x < boardSizeX; x++ {
+				if (board[y] & (1 << x)) == (1 << x) {
+					tbPrint(left+x*xScale, top+y*yScale, col, col, "[]")
+				}
+			}
+		}
+	}
+}
+
+func draw(t *tetromino, board []int, gameOver bool) {
 	const coldef = termbox.ColorDefault
 	termbox.Clear(coldef, coldef)
 
@@ -178,19 +224,24 @@ func draw(t *tetromino) {
 	drawBoardFrame(coldef, boardLeft, boardTop)
 	drawHints(coldef, boardLeft, boardTop)
 
+	drawBoard(coldef, boardLeft, boardTop, board)
+
 	drawTmino(coldef, boardLeft, boardTop, t)
+
+	if gameOver {
+		tbPrint(centerX-9, centerY-4, coldef, coldef, "+----------------+")
+		tbPrint(centerX-9, centerY-3, coldef, coldef, "|   Game Over!   |")
+		tbPrint(centerX-9, centerY-2, coldef, coldef, "+----------------+")
+	}
 
 	termbox.Flush()
 }
 
-func onKeyDown() {
-	spawnTmino()
-}
-
 func mainloop(eventQueue chan termbox.Event, done chan bool) {
-	board := make([]int, 20)
+	gameOver := false
+	board := make([]int, boardSizeY)
 	tmino := spawnTmino()
-	draw(tmino)
+	draw(tmino, board, gameOver)
 	updateInterval := initialDropInterval
 	updateTick := time.NewTicker(time.Duration(updateInterval) * time.Millisecond)
 	for {
@@ -202,29 +253,50 @@ func mainloop(eventQueue chan termbox.Event, done chan bool) {
 				case termbox.KeyEsc:
 					done <- true
 				case termbox.KeyArrowDown:
-					updateTick.Stop()
-					updateTick = time.NewTicker(time.Duration(hardDropInterval) * time.Millisecond)
+					if !gameOver {
+						updateTick.Stop()
+						updateTick = time.NewTicker(time.Duration(hardDropInterval) * time.Millisecond)
+					}
 				case termbox.KeyArrowLeft:
-					tmino.TryMoveLeft()
+					if !gameOver {
+						tmino.TryMoveLeft(board)
+					}
 				case termbox.KeyArrowRight:
-					tmino.TryMoveRight()
+					if !gameOver {
+						tmino.TryMoveRight(board)
+					}
 				case termbox.KeyArrowUp:
-					tmino.TryRotate()
+					if !gameOver {
+						tmino.TryRotate()
+					}
+				case termbox.KeySpace:
+					gameOver = false
+					updateTick = time.NewTicker(time.Duration(updateInterval) * time.Millisecond)
+					board = make([]int, boardSizeY)
+					tmino = spawnTmino()
 				default:
 				}
 			case termbox.EventError:
 				panic(ev.Err)
 			}
 		case <-updateTick.C:
-			switch tmino.TryDrop() {
+			switch tmino.TryDrop(board) {
 			case fix:
-				tmino.Fix(board)
-				updateTick.Stop()
-				updateTick = time.NewTicker(time.Duration(updateInterval) * time.Millisecond)
-				tmino = spawnTmino()
+				if !gameOver {
+					if !tmino.Fix(board) {
+						// Game over
+						updateTick.Stop()
+						gameOver = true
+					} else {
+						board = removeFullRows(board)
+						updateTick.Stop()
+						updateTick = time.NewTicker(time.Duration(updateInterval) * time.Millisecond)
+						tmino = spawnTmino()
+					}
+				}
 			}
 		}
-		draw(tmino)
+		draw(tmino, board, gameOver)
 	}
 }
 
