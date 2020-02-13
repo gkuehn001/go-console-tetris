@@ -23,98 +23,15 @@ const (
 	fix  dropResult = 1
 )
 
-var tetrominoX = [7][16]int{
-	{0, 1, 2, 3, 2, 2, 2, 2, 0, 1, 2, 3, 1, 1, 1, 1}, // I
-	{2, 0, 1, 2, 1, 1, 1, 2, 0, 1, 2, 0, 0, 1, 1, 1}, // L
-	{0, 0, 1, 2, 1, 2, 1, 1, 0, 1, 2, 2, 1, 1, 0, 1}, // J
-	{1, 0, 1, 2, 1, 1, 2, 1, 0, 1, 2, 1, 1, 0, 1, 1}, // T
-	{1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2}, // O
-	{1, 2, 0, 1, 1, 1, 2, 2, 1, 2, 0, 1, 0, 0, 1, 1}, // S
-	{0, 1, 1, 2, 2, 1, 2, 1, 0, 1, 1, 2, 1, 0, 1, 0}, // Z
-}
-var tetrominoY = [7][16]int{
-	{1, 1, 1, 1, 0, 1, 2, 3, 2, 2, 2, 2, 0, 1, 2, 3}, // I
-	{0, 1, 1, 1, 0, 1, 2, 2, 1, 1, 1, 2, 0, 0, 1, 2}, // L
-	{0, 1, 1, 1, 0, 0, 1, 2, 1, 1, 1, 2, 0, 1, 2, 2}, // J
-	{0, 1, 1, 1, 0, 1, 1, 2, 1, 1, 1, 2, 0, 1, 1, 2}, // T
-	{0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1}, // O
-	{0, 0, 1, 1, 0, 1, 1, 2, 1, 1, 2, 2, 0, 1, 1, 2}, // S
-	{0, 0, 1, 1, 0, 1, 1, 2, 1, 1, 2, 2, 0, 1, 1, 2}, // Z
-}
+type gameMode int
 
-type tetromino struct {
-	tIndex               int
-	variation            int
-	positionX, positionY int
-}
+const (
+	gmNormal gameMode = 0
+	gmChaos  gameMode = 1
+	gmMax    gameMode = 2
+)
 
-func (t *tetromino) TryMoveLeft(board []int) {
-	if t != nil {
-		for i := t.variation; i < t.variation+4; i++ {
-			x := tetrominoX[t.tIndex][i] + t.positionX
-			y := tetrominoY[t.tIndex][i] + t.positionY
-			if !checkFreeBoardPosition(board, x-1, y) {
-				return
-			}
-		}
-		t.positionX--
-	}
-}
-
-func (t *tetromino) TryMoveRight(board []int) {
-	if t != nil {
-		for i := t.variation; i < t.variation+4; i++ {
-			x := tetrominoX[t.tIndex][i] + t.positionX
-			y := tetrominoY[t.tIndex][i] + t.positionY
-			if !checkFreeBoardPosition(board, x+1, y) {
-				return
-			}
-		}
-		t.positionX++
-	}
-}
-
-func (t *tetromino) TryRotate() {
-	if t != nil {
-		newVariation := (t.variation + 4) % 16
-		for i := newVariation; i < newVariation+4; i++ {
-			newX := tetrominoX[t.tIndex][i] + t.positionX
-			newY := tetrominoY[t.tIndex][i] + t.positionY
-			if (newX < 0) || (newX >= boardSizeX) || (newY >= boardSizeY) {
-				return
-			}
-		}
-		t.variation = newVariation
-	}
-}
-
-func (t *tetromino) TryDrop(board []int) dropResult {
-	if t != nil {
-		for i := t.variation; i < t.variation+4; i++ {
-			x := tetrominoX[t.tIndex][i] + t.positionX
-			y := tetrominoY[t.tIndex][i] + t.positionY
-			if !checkFreeBoardPosition(board, x, y+1) {
-				return fix
-			}
-		}
-		t.positionY++
-	}
-	return none
-}
-
-func (t *tetromino) Fix(board []int) bool {
-	if t != nil {
-		for i := t.variation; i < t.variation+4; i++ {
-			x := tetrominoX[t.tIndex][i] + t.positionX
-			y := tetrominoY[t.tIndex][i] + t.positionY
-			if y < 0 {
-				return false
-			}
-			board[y] = board[y] | (1 << x)
-		}
-	}
-	return true
-}
+var glGameMode gameMode = gmNormal
 
 func checkFreeBoardPosition(board []int, x, y int) bool {
 	if x < 0 || x >= boardSizeX || y >= boardSizeY {
@@ -145,19 +62,38 @@ func tbPrint(x, y int, fg, bg termbox.Attribute, msg string) {
 
 func drawHints(col termbox.Attribute, left, top int) {
 	x, y := left-24, top+2
-	tbPrint(x, y, col, col, "    \u2190 : Move Left")
+	tbPrint(x, y, col, col, "     \u2190 : Move Left")
 	y++
-	tbPrint(x, y, col, col, "    \u2192 : Move Right")
+	tbPrint(x, y, col, col, "     \u2192 : Move Right")
 	y++
-	tbPrint(x, y, col, col, "    \u2191 : Rotate")
+	switch glGameMode {
+	case gmNormal:
+		tbPrint(x, y, col, col, "     \u2191 : Rotate")
+	case gmChaos:
+		tbPrint(x, y, col, col, "     \u2191 : Switch")
+	}
 	y++
-	tbPrint(x, y, col, col, "    \u2193 : Drop")
+	tbPrint(x, y, col, col, "     \u2193 : Drop")
 	y += 2
-	tbPrint(x, y, col, col, "SPACE : Restart")
+	switch glGameMode {
+	case gmNormal:
+		tbPrint(x, y, col, col, "CTRL-M : Normal")
+	case gmChaos:
+		tbPrint(x, y, col, col, "CTRL-M : Chaos")
+	}
+
+	y += 2
+	tbPrint(x, y, col, col, " SPACE : Restart")
 	y++
-	tbPrint(x, y, col, col, "  ESC : Quit")
+	tbPrint(x, y, col, col, "   ESC : Quit")
 
 	tbPrint(left+4, top+boardSizeY*yScale+3, col, col, "Play Tetris!")
+}
+
+func drawGameOver(col termbox.Attribute, centerX int, centerY int) {
+	tbPrint(centerX-9, centerY-4, col, col, "+----------------+")
+	tbPrint(centerX-9, centerY-3, col, col, "|   Game Over!   |")
+	tbPrint(centerX-9, centerY-2, col, col, "+----------------+")
 }
 
 func drawBoardFrame(col termbox.Attribute, left, top int) {
@@ -193,15 +129,14 @@ func drawTmino(col termbox.Attribute, left, top int, t *tetromino) {
 }
 
 func spawnTmino() *tetromino {
-	rand.Seed(time.Now().UnixNano())
-	return &tetromino{tIndex: rand.Intn(len(tetrominoX)), variation: 0, positionX: 3, positionY: -2}
+	return &tetromino{tIndex: rand.Intn(len(tetrominoX)), variation: 0, positionX: boardSizeX/2 - 2, positionY: -2}
 }
 
 func drawBoard(col termbox.Attribute, left, top int, board []int) {
-	for y := 0; y < boardSizeY; y++ {
-		if board[y] > 0 {
+	for y, by := range board {
+		if by > 0 {
 			for x := 0; x < boardSizeX; x++ {
-				if (board[y] & (1 << x)) == (1 << x) {
+				if (by & (1 << x)) == (1 << x) {
 					tbPrint(left+x*xScale, top+y*yScale, col, col, "[]")
 				}
 			}
@@ -229,9 +164,7 @@ func draw(t *tetromino, board []int, gameOver bool) {
 	drawTmino(coldef, boardLeft, boardTop, t)
 
 	if gameOver {
-		tbPrint(centerX-9, centerY-4, coldef, coldef, "+----------------+")
-		tbPrint(centerX-9, centerY-3, coldef, coldef, "|   Game Over!   |")
-		tbPrint(centerX-9, centerY-2, coldef, coldef, "+----------------+")
+		drawGameOver(coldef, centerX, centerY)
 	}
 
 	termbox.Flush()
@@ -274,6 +207,8 @@ func mainloop(eventQueue chan termbox.Event, done chan bool) {
 					updateTick = time.NewTicker(time.Duration(updateInterval) * time.Millisecond)
 					board = make([]int, boardSizeY)
 					tmino = spawnTmino()
+				case termbox.KeyCtrlM:
+					glGameMode = (glGameMode + 1) % gmMax
 				default:
 				}
 			case termbox.EventError:
@@ -317,6 +252,8 @@ func main() {
 			eventQueue <- termbox.PollEvent()
 		}
 	}()
+
+	rand.Seed(time.Now().UnixNano())
 
 	// start main game loop
 	done := make(chan bool)
